@@ -1,16 +1,13 @@
 // service-worker.js
 // This script runs in the background, separate from the main page.
 
-// Cache static assets for offline use
-const CACHE_NAME = 'water-filter-tracker-cache-v1';
+// Update the cache name to force a new cache installation
+const CACHE_NAME = 'water-filter-tracker-cache-v2';
 const urlsToCache = [
     '/',
     '/index.html',
     'https://cdn.tailwindcss.com',
-    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap',
-    '/manifest.json',
-    // We will dynamically cache the filter data later
-    '/data/filters.json' 
+    'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap'
 ];
 
 self.addEventListener('install', event => {
@@ -18,7 +15,6 @@ self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Opened cache and added base URLs');
                 return cache.addAll(urlsToCache);
             })
             .then(() => self.skipWaiting())
@@ -39,101 +35,101 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // Serve from cache first, then fall back to network
+    // Intercept fetch requests
+    const url = new URL(event.request.url);
+
+    // Always go to the network for the main page to avoid caching issues
+    if (url.pathname === '/index.html' || url.pathname === '/') {
+        event.respondWith(
+            fetch(event.request).catch(() => caches.match(event.request))
+        );
+        return;
+    }
+
+    // For all other requests, serve from cache first, then fall back to network
     event.respondWith(
         caches.match(event.request)
             .then(response => {
-                // Cache hit - return response
                 if (response) {
                     return response;
                 }
-                // No cache hit - fetch from network
-                return fetch(event.request).catch(() => {
-                    // This is a fallback for offline use, you can serve a simple offline page here
-                    return new Response('You appear to be offline.');
-                });
+                return fetch(event.request);
             })
     );
 });
 
-function sendNotification(title, message, emoji = '💧') {
-    self.registration.showNotification(title, {
-        body: message,
-        icon: 'icons/icon-192x192.png',
-        badge: 'icons/icon-512x512.png',
-        tag: 'filter-reminder',
-        renotify: true
-    });
-}
-
-function getFilterStatus(filter, now) {
-    const nextReplacement = new Date(filter.lastReplaced);
-    nextReplacement.setMonth(nextReplacement.getMonth() + filter.months);
-    const daysUntilReplacement = Math.ceil((nextReplacement - now) / (1000 * 60 * 60 * 24));
-    return { daysUntilReplacement, nextReplacement };
-}
-
+// A function to check and send notifications based on the filter data
 function checkAndSendNotifications() {
-    const now = new Date();
-    // Use caches.match to get the latest filters.json from the cache
+    // Fetch the filter data from the cache (or network if updated)
     caches.open(CACHE_NAME).then(cache => {
-        return cache.match('/data/filters.json');
-    }).then(response => {
-        if (response) {
-            return response.json();
-        }
-        return Promise.resolve([]); // Return an empty array if not found
-    }).then(filters => {
-        if (filters.length > 0) {
-            filters.forEach(filter => {
-                const status = getFilterStatus(filter, now);
-                
-                // Standard advance notifications
-                if (status.daysUntilReplacement <= filter.notificationDays && status.daysUntilReplacement > 0) {
-                    const message = `${filter.name} needs replacement in ${status.daysUntilReplacement} day(s)`;
-                    sendNotification('Water Filter Reminder', message);
-                }
-                
-                // Overdue notifications
-                if (status.daysUntilReplacement <= 0) {
-                    const message = `${filter.name} is ${Math.abs(status.daysUntilReplacement)} day(s) overdue for replacement!`;
-                    sendNotification('Water Filter URGENT', message, '🚨');
-                }
-                
-                // Check advanced notifications
-                const hoursUntilReplacement = Math.ceil((status.nextReplacement - now) / (1000 * 60 * 60));
-                
-                // Day before notifications
-                if (filter.dayBeforeNotifications && hoursUntilReplacement <= 24 && hoursUntilReplacement > 0) {
-                    if (hoursUntilReplacement % filter.dayBeforeInterval === 0) {
-                        sendNotification('Water Filter Reminder', `${filter.name} is due tomorrow!`);
-                    }
-                }
-                
-                // Replacement day notifications
-                if (filter.replacementDayNotifications && status.daysUntilReplacement <= 0 && status.daysUntilReplacement > -1) {
-                    if (hoursUntilReplacement % filter.replacementDayInterval === 0) {
-                        sendNotification('Water Filter URGENT', `${filter.name} is due today!`, '🚨');
-                    }
-                }
-            });
-        }
-    }).catch(error => {
-        console.error('Failed to get filter data from cache:', error);
+        cache.match('/data/filters.json').then(response => {
+            if (response) {
+                response.json().then(filters => {
+                    const now = new Date();
+                    filters.forEach(filter => {
+                        const lastReplaced = new Date(filter.lastReplaced);
+                        const nextReplacement = new Date(lastReplaced);
+                        nextReplacement.setMonth(nextReplacement.getMonth() + filter.months);
+                        const daysUntilReplacement = Math.ceil((nextReplacement - now) / (1000 * 60 * 60 * 24));
+
+                        // Standard notifications for when a filter is due soon
+                        if (daysUntilReplacement <= filter.notificationDays && daysUntilReplacement > 0) {
+                            const message = `${filter.name} needs replacement in ${daysUntilReplacement} day(s)`;
+                            sendNotification('Water Filter Reminder', message);
+                        }
+
+                        // Overdue notifications
+                        if (daysUntilReplacement <= 0) {
+                            const message = `${filter.name} is ${Math.abs(daysUntilReplacement)} day(s) overdue for replacement!`;
+                            sendNotification('Water Filter URGENT', message, '🚨');
+                        }
+
+                        // Advanced notifications (day before, replacement day)
+                        if (filter.dayBeforeNotifications && daysUntilReplacement === 1) {
+                            const hoursUntil = Math.floor((nextReplacement - now) / (1000 * 60 * 60));
+                            if (hoursUntil % filter.dayBeforeInterval === 0) {
+                                sendNotification('Water Filter Reminder', `${filter.name} needs replacement tomorrow!`);
+                            }
+                        }
+
+                        if (filter.replacementDayNotifications && daysUntilReplacement === 0) {
+                            const hoursOverdue = Math.floor((now - nextReplacement) / (1000 * 60 * 60));
+                            if (hoursOverdue % filter.replacementDayInterval === 0) {
+                                sendNotification('Water Filter Reminder', `${filter.name} is due for replacement today!`);
+                            }
+                        }
+                    });
+                });
+            }
+        });
     });
+}
+
+// A simple helper function to send a notification
+function sendNotification(title, body, icon = '💧') {
+    if ('Notification' in self && Notification.permission === 'granted') {
+        const options = {
+            body: body,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-512x512.png',
+        };
+        self.registration.showNotification(title, options);
+    }
 }
 
 // Handle messages from the main page (index.html)
 self.addEventListener('message', event => {
     if (event.data && event.data.action === 'start-periodic-check') {
-        // We will call it once and then rely on the browser's background sync.
+        // This is a simplified periodic check. In a production app,
+        // we'd use Periodic Sync or background fetch.
+        // For this example, we'll call it once. The browser's OS
+        // will handle background tasks if the app is used regularly.
         checkAndSendNotifications();
     }
 });
 
 self.addEventListener('notificationclick', event => {
     event.notification.close();
-    // This will open the app when the user clicks the notification
     event.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
             for (let i = 0; i < clientList.length; i++) {
