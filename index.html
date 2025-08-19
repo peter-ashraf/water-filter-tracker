@@ -473,9 +473,9 @@
             const filter = filters.find(f => f.id === filterId);
             if (!filter) return;
             
-            const title = `Test: ${filter.name} Filter Alert!`;
+            const title = `Test: ${filter.name} Alert!`;
             const options = {
-                body: `This is a test notification for your ${filter.name}.`,
+                body: `This is a test notification for your ${filter.name} filter.`,
                 icon: 'https://placehold.co/192x192/4F46E5/FFFFFF?text=💧'
             };
 
@@ -537,6 +537,17 @@
             localStorage.removeItem('notifications');
             renderNotifications();
             showToast('All notifications cleared!', "success");
+        }
+        
+        // Register the Service Worker for PWA functionality
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }).catch(err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
         }
 
 
