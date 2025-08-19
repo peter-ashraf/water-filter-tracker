@@ -6,7 +6,6 @@
     <title>Water Filter Tracker</title>
     
     <!-- PWA Manifest & Icons -->
-    <!-- The missing icon references have been replaced with placeholders for now. -->
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="https://placehold.co/192x192/4F46E5/FFFFFF?text=💧">
     <link rel="apple-touch-icon" href="https://placehold.co/512x512/4F46E5/FFFFFF?text=💧">
@@ -27,12 +26,31 @@
         .container {
             max-width: 1200px;
         }
-        
+
+        /* Styles from the new file for the card layout */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            justify-content: center;
+            gap: 1.5rem;
+        }
+        .grid-item {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+        }
+        .filter-card {
+            height: 100%;
+        }
         .progress-bar {
             height: 8px;
             border-radius: 9999px;
-            background-color: #667eea;
-            transition: width 0.3s ease-in-out;
+            background-color: #e5e7eb;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-in-out;
         }
         
         /* Toast message styling */
@@ -78,7 +96,7 @@
                 </div>
                 
                 <!-- Filter List -->
-                <div id="filtersList" class="space-y-4">
+                <div id="filter-cards" class="grid-container">
                     <!-- Filters will be rendered here -->
                 </div>
             </section>
@@ -99,12 +117,10 @@
             </div>
             <p id="statusText" class="font-medium flex-grow mb-4 text-sm text-gray-600">🔔 Notifications: Status pending...</p>
 
-
             <!-- Recent Notifications -->
             <div id="recentNotificationsSection" class="mt-6">
                 <div class="flex items-center justify-between mb-2">
                     <h3 class="text-xl font-bold text-gray-800">Recent Notifications</h3>
-                    <!-- NEW: Button to clear all notifications -->
                     <button id="clearNotificationsBtn" class="text-red-500 hover:text-red-700 font-medium transition-colors duration-200">
                         Clear All
                     </button>
@@ -113,6 +129,7 @@
                     <li id="no-notifications" class="text-gray-400 italic">No recent notifications.</li>
                 </ul>
             </div>
+
         </section>
 
         <!-- Toast Container for messages -->
@@ -122,17 +139,16 @@
     <script>
         // Data structure for a filter
         class Filter {
-            constructor(id, name, intervalMonths, lastChanged, enabled) {
+            constructor(id, name, intervalDays, lastChanged) {
                 this.id = id;
                 this.name = name;
-                this.intervalMonths = intervalMonths;
+                this.intervalDays = intervalDays;
                 this.lastChanged = lastChanged; // Timestamp in milliseconds
-                this.enabled = enabled;
             }
         }
 
         // DOM elements
-        const filtersList = document.getElementById('filtersList');
+        const filterCardsContainer = document.getElementById('filter-cards');
         const addFilterBtn = document.getElementById('addFilterBtn');
         const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
         const disableNotificationsBtn = document.getElementById('disableNotificationsBtn');
@@ -145,15 +161,11 @@
 
         // --- Core Application Logic ---
 
-        // Initializes the app: loads data, registers service worker, and renders UI
+        // Initializes the app: loads data and renders UI
         function init() {
             loadState();
-            renderFilters();
+            renderFilterCards();
             renderNotifications();
-            // The service worker registration has been commented out because it fails
-            // in this specific sandbox environment due to a browser security policy.
-            // It would work correctly on a live server with a proper file structure.
-            // registerServiceWorker();
             updateNotificationStatusText();
         }
 
@@ -165,13 +177,22 @@
             if (storedFilters) {
                 filters = JSON.parse(storedFilters);
             } else {
-                // Default filters if none exist
-                const now = Date.now();
+                // Default filters if none exist, based on the provided data
                 filters = [
-                    new Filter(now, 'Refrigerator Filter', 6, now, true),
-                    new Filter(now + 1, 'Whole House Filter', 12, now, true),
-                    new Filter(now + 2, 'Under-sink Filter', 3, now - 30 * 24 * 60 * 60 * 1000, true) // Example overdue filter
+                    { id: 'sediment', name: 'Sediment Filter', stage: 1, defaultIntervalDays: 90, color: 'sky' },
+                    { id: 'carbon', name: 'Activated Carbon Filter', stage: 2, defaultIntervalDays: 90, color: 'teal' },
+                    { id: 'ro', name: 'RO Membrane', stage: 3, defaultIntervalDays: 730, color: 'indigo' },
+                    { id: 'uv', name: 'UV Lamp', stage: 4, defaultIntervalDays: 365, color: 'purple' },
+                    { id: 'tds', name: 'TDS Adjuster', stage: 5, defaultIntervalDays: 365, color: 'emerald' },
+                    { id: 'mineral', name: 'Mineral Cartridge', stage: 6, defaultIntervalDays: 365, color: 'orange' },
+                    { id: 'post-carbon', name: 'Post-Carbon Filter', stage: 7, defaultIntervalDays: 365, color: 'rose' }
                 ];
+                // Initialize last replaced date for each filter
+                filters.forEach(filter => {
+                    if (!localStorage.getItem(`last-replaced-${filter.id}`)) {
+                        localStorage.setItem(`last-replaced-${filter.id}`, new Date().toISOString().split('T')[0]);
+                    }
+                });
                 saveState();
             }
 
@@ -191,74 +212,190 @@
         function addFilter() {
             const name = prompt("Enter filter name (e.g., 'Refrigerator Filter'):");
             if (!name) return;
-            const intervalMonths = parseInt(prompt("Enter replacement interval in months (e.g., 6):"), 10);
-            if (isNaN(intervalMonths) || intervalMonths <= 0) {
-                showToast("Please enter a valid number for months.", "error");
+            const intervalDays = parseInt(prompt("Enter replacement interval in days (e.g., 90):"), 10);
+            if (isNaN(intervalDays) || intervalDays <= 0) {
+                showToast("Please enter a valid number of days.", "error");
                 return;
             }
 
-            const newFilter = new Filter(
-                Date.now(),
-                name,
-                intervalMonths,
-                Date.now(),
-                true
-            );
+            const newFilter = {
+                id: name.toLowerCase().replace(/\s/g, '-'),
+                name: name,
+                stage: filters.length + 1,
+                defaultIntervalDays: intervalDays,
+                color: 'gray' // Default color for new filters
+            };
+            
             filters.push(newFilter);
+            localStorage.setItem(`last-replaced-${newFilter.id}`, new Date().toISOString().split('T')[0]);
             saveState();
-            renderFilters();
+            renderFilterCards();
             showToast(`'${name}' added successfully!`, "success");
         }
 
-        function renderFilters() {
-            filtersList.innerHTML = ''; // Clear existing filters
-            if (filters.length === 0) {
-                filtersList.innerHTML = '<p class="text-center text-gray-400 italic">No filters added yet. Click "+ Add New Filter" to get started.</p>';
-            }
+        /**
+         * Renders the filter cards based on the current data.
+         */
+        function renderFilterCards() {
+            filterCardsContainer.innerHTML = '';
             filters.forEach(filter => {
-                const now = Date.now();
-                const lastChanged = new Date(filter.lastChanged);
-                const nextChange = new Date(lastChanged.setMonth(lastChanged.getMonth() + filter.intervalMonths));
-                const daysLeft = Math.ceil((nextChange - now) / (1000 * 60 * 60 * 24));
-                const progress = Math.min(100, Math.max(0, 100 - (daysLeft / (filter.intervalMonths * 30)) * 100));
+                const lastReplacedDate = localStorage.getItem(`last-replaced-${filter.id}`);
+                const lastReplaced = lastReplacedDate ? new Date(lastReplacedDate) : null;
                 
-                const filterCard = document.createElement('div');
-                filterCard.className = `p-6 rounded-2xl shadow-md transition-all duration-300 transform ${daysLeft <= 7 ? 'bg-red-100 hover:shadow-lg' : 'bg-gray-100 hover:shadow-lg'} space-y-3`;
-                
-                filterCard.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-semibold text-gray-800">${filter.name}</h3>
-                        <span class="text-sm font-medium ${daysLeft <= 7 ? 'text-red-600' : 'text-green-600'}">${daysLeft} days left</span>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full overflow-hidden">
-                        <div class="progress-bar" style="width: ${progress}%; background-color: ${daysLeft <= 7 ? '#ef4444' : '#22c55e'};"></div>
-                    </div>
-                    <div class="flex items-center justify-between text-sm text-gray-500">
-                        <p>Last changed: ${new Date(filter.lastChanged).toLocaleDateString()}</p>
-                        <p>Next change: ${nextChange.toLocaleDateString()}</p>
-                    </div>
-                    <div class="flex justify-end space-x-2">
-                        <button onclick="changeFilter(${filter.id})" class="px-4 py-2 bg-indigo-500 text-white rounded-full text-xs font-semibold hover:bg-indigo-600 transition-colors">
-                            Change Now
-                        </button>
+                const customIntervalDays = parseInt(localStorage.getItem(`custom-interval-days-${filter.id}`));
+                const intervalDays = customIntervalDays > 0 ? customIntervalDays : filter.defaultIntervalDays;
+
+                const nextDueDate = lastReplaced ? new Date(lastReplaced.getTime() + intervalDays * 24 * 60 * 60 * 1000) : null;
+
+                const status = calculateStatus(nextDueDate);
+                const statusColor = getStatusColor(status);
+                const statusText = getStatusText(status);
+
+                const now = new Date();
+                const daysPassed = lastReplaced ? Math.floor((now.getTime() - lastReplaced.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                const progress = Math.min(100, (daysPassed / intervalDays) * 100);
+
+                const cardHtml = `
+                    <div class="grid-item">
+                        <div class="filter-card bg-white p-6 rounded-xl shadow-md border-t-4 border-${statusColor}-500 transform transition-transform duration-300 hover:scale-105 relative w-full">
+                            <button class="absolute top-2 right-2 text-gray-400 hover:text-red-500 delete-filter-btn" data-filter-id="${filter.id}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 112 0v6a1 1 0 11-2 0V8z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <div class="flex items-center justify-between mb-2">
+                                <h2 class="text-xl font-bold text-${filter.color}-800">Stage ${filter.stage}: ${filter.name}</h2>
+                                <span class="px-3 py-1 text-xs font-medium rounded-full text-white bg-${statusColor}-500">${statusText}</span>
+                            </div>
+                            <div class="progress-bar mb-4">
+                                <div class="progress-fill bg-${statusColor}-500" style="width: ${progress}%;"></div>
+                            </div>
+                            <p class="text-gray-500 text-sm mb-4">Current cycle: ${intervalDays} days (~${(intervalDays / 30).toFixed(1)} months)</p>
+                            <div class="text-gray-700 text-sm">
+                                <p>Last Replaced: <span class="font-semibold">${lastReplaced ? lastReplaced.toLocaleDateString() : 'Never'}</span></p>
+                                <p>Due Date: <span class="font-semibold">${nextDueDate ? nextDueDate.toLocaleDateString() : 'N/A'}</span></p>
+                            </div>
+                            <div class="mt-4">
+                                <label for="custom-interval-${filter.id}" class="text-gray-600 text-sm block mb-1">Set custom cycle (days):</label>
+                                <div class="flex items-center space-x-2">
+                                    <input type="number" id="custom-interval-${filter.id}" class="w-24 rounded-md border border-gray-300 p-2 text-sm text-gray-700" placeholder="${filter.defaultIntervalDays}" value="${customIntervalDays > 0 ? customIntervalDays : ''}">
+                                    <button class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-300 transition-colors save-interval-btn" data-filter-id="${filter.id}">
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                            <button class="mt-4 w-full bg-${filter.color}-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-${filter.color}-600 transition-colors replace-btn" data-filter-id="${filter.id}">
+                                Mark as Replaced
+                            </button>
+                        </div>
                     </div>
                 `;
-                filtersList.appendChild(filterCard);
+                filterCardsContainer.innerHTML += cardHtml;
             });
+
+            addEventListeners();
         }
 
-        function changeFilter(id) {
-            const filterIndex = filters.findIndex(f => f.id === id);
-            if (filterIndex > -1) {
-                filters[filterIndex].lastChanged = Date.now();
-                saveState();
-                renderFilters();
-                showToast(`'${filters[filterIndex].name}' has been reset!`, "success");
+        /**
+         * Adds event listeners to the dynamically created buttons and inputs.
+         */
+        function addEventListeners() {
+            document.querySelectorAll('.replace-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const filterId = e.target.dataset.filterId;
+                    localStorage.setItem(`last-replaced-${filterId}`, new Date().toISOString().split('T')[0]);
+                    renderFilterCards();
+                    showToast('Filter marked as replaced!', "success");
+                });
+            });
+
+            document.querySelectorAll('.save-interval-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const filterId = e.target.dataset.filterId;
+                    const input = document.getElementById(`custom-interval-${filterId}`);
+                    const customDays = parseInt(input.value);
+
+                    if (customDays > 0) {
+                        localStorage.setItem(`custom-interval-days-${filterId}`, customDays);
+                        renderFilterCards();
+                        showToast('Custom interval saved!', "success");
+                    } else {
+                        input.value = ''; // Clear invalid input
+                        showToast("Please enter a positive number of days.", "warning");
+                    }
+                });
+            });
+            
+            document.querySelectorAll('.delete-filter-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const filterId = e.target.closest('button').dataset.filterId;
+                    deleteFilter(filterId);
+                });
+            });
+        }
+        
+        /**
+         * Deletes a filter from the list and local storage.
+         * @param {string} filterId The ID of the filter to delete.
+         */
+        function deleteFilter(filterId) {
+            if (confirm("Are you sure you want to delete this filter? This action cannot be undone.")) {
+                filters = filters.filter(f => f.id !== filterId);
+                localStorage.removeItem(`last-replaced-${filterId}`);
+                localStorage.removeItem(`custom-interval-days-${filterId}`);
+                saveState(); // Save the new filter list
+                renderFilterCards();
+                showToast('Filter deleted successfully!', "success");
+            }
+        }
+        
+        /**
+         * Calculates the status of a filter based on its due date.
+         * @param {Date} dueDate The date the filter is due.
+         * @returns {string} The status: 'overdue', 'due_soon', or 'good'.
+         */
+        function calculateStatus(dueDate) {
+            if (!dueDate) return 'good';
+            const now = new Date();
+            const timeRemaining = dueDate.getTime() - now.getTime();
+            const daysRemaining = Math.ceil(timeRemaining / (1000 * 60 * 60 * 24));
+
+            if (daysRemaining <= 0) {
+                return 'overdue';
+            } else if (daysRemaining <= 14) {
+                return 'due_soon';
+            } else {
+                return 'good';
+            }
+        }
+        
+        /**
+         * Gets the color for the status pill.
+         * @param {string} status The filter status.
+         * @returns {string} The Tailwind CSS color string.
+         */
+        function getStatusColor(status) {
+            switch (status) {
+                case 'overdue': return 'red';
+                case 'due_soon': return 'yellow';
+                default: return 'green';
+            }
+        }
+
+        /**
+         * Gets the text for the status pill.
+         * @param {string} status The filter status.
+         * @returns {string} The status text.
+         */
+        function getStatusText(status) {
+            switch (status) {
+                case 'overdue': return 'OVERDUE';
+                case 'due_soon': return 'DUE SOON';
+                default: return 'GOOD';
             }
         }
 
         // --- Notification Logic ---
-
         function updateNotificationStatusText() {
             if ('Notification' in window) {
                 const permission = Notification.permission;
@@ -306,9 +443,16 @@
                  showToast('Notifications are not enabled.', 'warning');
             }
         }
-
+        
+        /**
+         * Renders the recent notifications from local storage.
+         */
         function renderNotifications() {
             notificationsList.innerHTML = '';
+            const storedNotifications = localStorage.getItem('notifications');
+            if (storedNotifications) {
+                notifications = JSON.parse(storedNotifications);
+            }
             if (notifications.length === 0) {
                 notificationsList.innerHTML = '<li id="no-notifications" class="text-gray-400 italic">No recent notifications.</li>';
             }
@@ -326,13 +470,16 @@
             });
         }
         
-        // Function to clear all notifications from UI and storage
+        /**
+         * Clears all notifications from the UI and local storage.
+         */
         function clearAllNotifications() {
             notifications = [];
-            saveState();
+            localStorage.removeItem('notifications');
             renderNotifications();
             showToast('All notifications cleared!', "success");
         }
+
 
         // --- Toast Messages ---
 
@@ -374,9 +521,9 @@
         // --- Event Listeners ---
         window.addEventListener('load', init);
         addFilterBtn.addEventListener('click', addFilter);
-        clearNotificationsBtn.addEventListener('click', clearAllNotifications);
         enableNotificationsBtn.addEventListener('click', requestNotificationPermission);
         disableNotificationsBtn.addEventListener('click', disableNotifications);
+        clearNotificationsBtn.addEventListener('click', clearAllNotifications);
         
     </script>
 </body>
