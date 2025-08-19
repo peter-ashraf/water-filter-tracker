@@ -161,7 +161,6 @@
                     <p id="notification-status" class="font-bold text-lg">🔔 Notifications: Checking...</p>
                     <p class="text-white/80">Allow notifications to get reminders when filters are due</p>
                 </div>
-                <!-- REMOVED: backdrop-filter blur-sm -->
                 <button id="request-permission-btn" class="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-full transition-all duration-300 hover:scale-105">
                     Enable
                 </button>
@@ -322,6 +321,17 @@
         let currentEditingId = null;
 
         document.addEventListener('DOMContentLoaded', () => {
+            // Register the service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                    .then(registration => {
+                        console.log('Service Worker registered successfully with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.log('Service Worker registration failed: ', err);
+                    });
+            }
+
             loadData();
             checkNotificationPermission();
             
@@ -369,6 +379,19 @@
             localStorage.setItem('filters', JSON.stringify(filters));
             localStorage.setItem('notifications', JSON.stringify(notifications));
             localStorage.setItem('nextFilterId', nextFilterId);
+
+            // Update a JSON file in the cache for the service worker to access
+            const blob = new Blob([JSON.stringify(filters)], { type: 'application/json' });
+            const dataUrl = URL.createObjectURL(blob);
+            
+            caches.open('water-filter-tracker-cache-v1').then(cache => {
+                cache.put('/data/filters.json', new Response(blob));
+            });
+
+            // Tell the service worker to check for notifications
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ action: 'start-periodic-check' });
+            }
         }
 
         function setupFilters() {
@@ -395,7 +418,6 @@
             saveData();
             showFiltersSection();
             updateFiltersDisplay();
-            startNotificationChecking();
 
             showToast('Filter tracking started successfully!', 'success');
         }
@@ -650,87 +672,25 @@
         }
 
         function testAllNotifications() {
+            if (!('Notification' in window) || Notification.permission !== 'granted') {
+                showToast('Notifications are not enabled.', 'error');
+                return;
+            }
             let delay = 0;
             filters.forEach((filter, index) => {
                 setTimeout(() => {
-                    testNotification(filter.name);
+                    new Notification('Water Filter Test', {
+                        body: `Time to replace: ${filter.name}`,
+                        icon: '💧',
+                        badge: '💧'
+                    });
+                    addNotification(`Test notification sent for ${filter.name}`);
                 }, delay);
                 delay += 500;
             });
             showToast('Test notifications sent for all filters!', 'success');
         }
-
-        function testNotification(filterName) {
-            if ('Notification' in window) {
-                if (Notification.permission === 'granted') {
-                    new Notification('Water Filter Reminder', {
-                        body: `Time to replace: ${filterName}`,
-                        icon: '💧',
-                        badge: '💧'
-                    });
-                    addNotification(`Test notification sent for ${filterName}`);
-                } else if (Notification.permission !== 'denied') {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === 'granted') {
-                            testNotification(filterName);
-                        }
-                    });
-                } else {
-                    showToast('Please enable notifications in your browser settings', 'warning');
-                }
-            } else {
-                showToast('Notifications not supported in this browser', 'error');
-            }
-        }
-
-        function checkNotifications() {
-            const now = new Date();
-            
-            filters.forEach(filter => {
-                const status = getFilterStatus(filter);
-                
-                // Overdue notifications
-                if (status.daysUntilReplacement <= 0) {
-                    const message = `${filter.name} is ${Math.abs(status.daysUntilReplacement)} day(s) overdue for replacement!`;
-                    sendNotification('Water Filter URGENT', message, '🚨');
-                    addNotification(message);
-                }
-
-                // Standard advance notifications
-                if (status.daysUntilReplacement <= filter.notificationDays && status.daysUntilReplacement > 0) {
-                    const message = `${filter.name} needs replacement in ${status.daysUntilReplacement} day(s)`;
-                    sendNotification('Water Filter Reminder', message);
-                    addNotification(message);
-                }
-                
-                // Advanced day-before notifications
-                if (filter.dayBeforeNotifications && status.daysUntilReplacement === 1) {
-                    const lastNotification = notifications.find(n => n.filterId === filter.id && n.type === 'dayBefore' && new Date(n.timestamp).getDate() === now.getDate());
-                    if (!lastNotification) {
-                        const message = `REMINDER: ${filter.name} is due for replacement tomorrow!`;
-                        sendNotification('Water Filter Reminder', message, '🔔');
-                        addNotification(message, filter.id, 'dayBefore');
-                    }
-                }
-
-                // Advanced replacement day notifications
-                if (filter.replacementDayNotifications && status.daysUntilReplacement <= 0) {
-                    const lastNotification = notifications.find(n => n.filterId === filter.id && n.type === 'overdue' && new Date(n.timestamp).getDate() === now.getDate());
-                     if (!lastNotification) {
-                        const message = `${filter.name} is overdue for replacement! Please replace it now.`;
-                        sendNotification('Water Filter URGENT', message, '🚨');
-                        addNotification(message, filter.id, 'overdue');
-                    }
-                }
-            });
-        }
-
-        function sendNotification(title, message, icon = '💧') {
-            if ('Notification' in window && Notification.permission === 'granted') {
-                new Notification(title, { body: message, icon: icon, badge: icon });
-            }
-        }
-
+        
         function addNotification(message, filterId = null, type = 'standard') {
             const newNotification = {
                 message,
@@ -813,7 +773,6 @@
             if (permission === 'granted') {
                 statusText.textContent = '🔔 Notifications: Enabled';
                 requestBtn.style.display = 'none';
-                startNotificationChecking();
             } else if (permission === 'denied') {
                 statusText.textContent = '🔔 Notifications: Blocked';
                 requestBtn.textContent = 'Blocked';
@@ -843,19 +802,6 @@
                 });
             }
         }
-
-        let notificationIntervalId = null;
-
-        function startNotificationChecking() {
-            if (notificationIntervalId) {
-                clearInterval(notificationIntervalId);
-            }
-            // Check every 10 minutes (600000ms) for notifications
-            notificationIntervalId = setInterval(checkNotifications, 600000); 
-            // Also run once on startup
-            checkNotifications();
-        }
-
     </script>
 </body>
 </html>
