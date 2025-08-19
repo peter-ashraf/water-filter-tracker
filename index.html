@@ -4,16 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Water Filter Tracker</title>
+    
+    <!-- PWA Manifest & Icons -->
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png">
     <link rel="apple-touch-icon" href="/icons/icon-512x512.png">
     <meta name="theme-color" content="#2563eb" />
+
+    <!-- Tailwind CSS & Inter Font -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 1rem;
         }
         
         .container {
@@ -149,8 +156,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen p-4">
-
+<body>
     <div class="container mx-auto">
         <!-- Header -->
         <div class="text-center mb-8">
@@ -170,34 +176,9 @@
                 </button>
             </div>
         </div>
-
-        <!-- Setup Section -->
-        <div class="setup-section" id="setupSection">
-            <div class="setup-form p-8 rounded-3xl shadow-2xl mb-8">
-                <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">🛠️ Initial Setup</h2>
-                <div class="max-w-md mx-auto">
-                    <div class="mb-6">
-                        <label class="block text-gray-700 text-sm font-bold mb-2">Installation Date:</label>
-                        <input type="date" id="installDate" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors">
-                    </div>
-                    <div class="mb-6">
-                        <label class="block text-gray-700 text-sm font-bold mb-2">Default Notification Timing:</label>
-                        <select id="notificationTime" class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none transition-colors">
-                            <option value="1">1 day before</option>
-                            <option value="3">3 days before</option>
-                            <option value="7" selected>1 week before</option>
-                            <option value="14">2 weeks before</option>
-                        </select>
-                    </div>
-                    <button class="btn w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl" onclick="setupFilters()">
-                        🚀 Start Tracking
-                    </button>
-                </div>
-            </div>
-        </div>
-
+        
         <!-- Filters Grid -->
-        <div id="filtersSection" class="hidden">
+        <div id="filtersSection">
             <div class="flex justify-between items-center mb-8">
                 <h2 class="text-3xl font-bold text-white drop-shadow-lg">🔧 Filter Status</h2>
                 <button class="btn bg-gradient-to-r from-green-500 to-blue-500 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl" onclick="testAllNotifications()">
@@ -208,9 +189,9 @@
                 <!-- Filter cards will be populated here -->
             </div>
         </div>
-
+        
         <!-- Notifications Log -->
-        <div id="notificationsSection" class="hidden mt-12">
+        <div id="notificationsSection" class="mt-12">
             <div class="glass-effect p-8 rounded-3xl shadow-xl">
                 <h2 class="text-2xl font-bold text-white mb-6">🔔 Recent Notifications</h2>
                 <div id="notificationsList" class="space-y-3">
@@ -227,7 +208,7 @@
             <span id="toastMessage">Success!</span>
         </div>
     </div>
-
+    
     <!-- Modal for Add/Edit Filter -->
     <div class="modal fixed inset-0 z-50 flex items-center justify-center opacity-0 invisible transition-all duration-300" id="filterModal">
         <div class="modal-content max-w-lg w-full mx-4 p-8 rounded-3xl shadow-2xl">
@@ -308,7 +289,6 @@
     </div>
 
     <script>
-        // Filter configuration with researched schedules
         const filterConfig = [
             { id: 1, name: 'Sediment Filter (Stage 1)', months: 3, description: 'Removes dirt, rust, and large particles', color: 'blue' },
             { id: 2, name: 'Carbon Pre-Filter (Stage 2)', months: 3, description: 'Removes chlorine and odors', color: 'teal' },
@@ -325,9 +305,8 @@
         let currentEditingId = null;
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Register the service worker
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                navigator.serviceWorker.register('service-worker.js', { scope: '/' })
                     .then(registration => {
                         console.log('Service Worker registered successfully with scope: ', registration.scope);
                     })
@@ -363,11 +342,19 @@
                     installDate: new Date(filter.installDate),
                     lastReplaced: new Date(filter.lastReplaced)
                 }));
-                showFiltersSection();
-                updateFiltersDisplay();
             } else {
-                // If no filters are stored, show the setup page by default
-                document.getElementById('setupSection').classList.remove('hidden');
+                // If no filters are stored, initialize with default values
+                const installDate = new Date();
+                filters = filterConfig.map(config => ({
+                    ...config,
+                    installDate: installDate,
+                    lastReplaced: installDate,
+                    notificationDays: 7,
+                    dayBeforeNotifications: false,
+                    dayBeforeInterval: 2,
+                    replacementDayNotifications: false,
+                    replacementDayInterval: 1
+                }));
             }
 
             if (storedNotifications) {
@@ -378,6 +365,8 @@
             if (storedId) {
                 nextFilterId = parseInt(storedId);
             }
+            
+            updateFiltersDisplay();
         }
 
         function saveData() {
@@ -388,48 +377,12 @@
             // Update a JSON file in the cache for the service worker to access
             const blob = new Blob([JSON.stringify(filters)], { type: 'application/json' });
             
-            // Check if service worker is active before trying to update the cache
             if (navigator.serviceWorker.controller) {
-                caches.open('water-filter-tracker-cache-v1').then(cache => {
+                caches.open('water-filter-tracker-cache-v2').then(cache => {
                     cache.put('/data/filters.json', new Response(blob));
                 });
-                // Tell the service worker to check for notifications
                 navigator.serviceWorker.controller.postMessage({ action: 'start-periodic-check' });
             }
-        }
-
-        function setupFilters() {
-            const installDate = document.getElementById('installDate').value;
-            const notificationDays = parseInt(document.getElementById('notificationTime').value);
-
-            if (!installDate) {
-                showToast('Please select an installation date', 'error');
-                return;
-            }
-
-            // Initialize filters with colors
-            filters = filterConfig.map(config => ({
-                ...config,
-                installDate: new Date(installDate),
-                lastReplaced: new Date(installDate),
-                notificationDays: notificationDays,
-                dayBeforeNotifications: false,
-                dayBeforeInterval: 2,
-                replacementDayNotifications: false,
-                replacementDayInterval: 1
-            }));
-
-            saveData();
-            showFiltersSection();
-            updateFiltersDisplay();
-
-            showToast('Filter tracking started successfully!', 'success');
-        }
-
-        function showFiltersSection() {
-            document.getElementById('setupSection').classList.add('hidden');
-            document.getElementById('filtersSection').classList.remove('hidden');
-            document.getElementById('notificationsSection').classList.remove('hidden');
         }
 
         function updateFiltersDisplay() {
@@ -442,7 +395,6 @@
                 grid.appendChild(card);
             });
 
-            // Add "Add New Filter" card
             const addCard = document.createElement('div');
             addCard.className = 'filter-card add-filter-card min-h-[300px] rounded-2xl shadow-xl flex items-center justify-center cursor-pointer text-white';
             addCard.onclick = () => openAddFilterModal();
@@ -462,7 +414,7 @@
             nextReplacement.setMonth(nextReplacement.getMonth() + filter.months);
             
             const daysUntilReplacement = Math.ceil((nextReplacement - now) / (1000 * 60 * 60 * 24));
-            const totalDays = filter.months * 30; // Using 30 days/month for approximation
+            const totalDays = filter.months * 30;
             const daysSinceReplacement = Math.ceil((now - filter.lastReplaced) / (1000 * 60 * 60 * 24));
             const progress = Math.min(100, Math.max(0, (daysSinceReplacement / totalDays) * 100));
 
@@ -545,7 +497,6 @@
                     </button>
                 </div>
             `;
-
             return card;
         }
 
@@ -633,7 +584,6 @@
             const replacementDayInterval = parseInt(document.getElementById('replacementDayInterval').value) || 1;
 
             if (currentEditingId !== null) {
-                // Update existing filter
                 const filter = filters.find(f => f.id === currentEditingId);
                 if (filter) {
                     filter.name = filterName;
@@ -646,7 +596,6 @@
                     filter.replacementDayInterval = replacementDayInterval;
                 }
             } else {
-                // Add new filter
                 const newFilter = {
                     id: nextFilterId++,
                     name: filterName,
@@ -677,7 +626,7 @@
 
         function testAllNotifications() {
             if (!('Notification' in window) || Notification.permission !== 'granted') {
-                showToast('Notifications are not enabled.', 'error');
+                showToast('Notifications are not enabled. Please enable them first.', 'error');
                 return;
             }
             let delay = 0;
@@ -685,8 +634,8 @@
                 setTimeout(() => {
                     new Notification('Water Filter Test', {
                         body: `Time to replace: ${filter.name}`,
-                        icon: 'icons/icon-192x192.png',
-                        badge: 'icons/icon-512x512.png',
+                        icon: '/icons/icon-192x192.png',
+                        badge: '/icons/icon-512x512.png',
                     });
                     addNotification(`Test notification sent for ${filter.name}`);
                 }, delay);
@@ -702,7 +651,6 @@
                 filterId,
                 type
             };
-            // Limit log to 10 notifications
             notifications.unshift(newNotification);
             if (notifications.length > 10) {
                 notifications.pop();
