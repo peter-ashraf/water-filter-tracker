@@ -172,7 +172,7 @@
         </div>
 
         <!-- Setup Section -->
-        <div class="setup-section" id="setupSection" style="display: none;">
+        <div class="setup-section" id="setupSection">
             <div class="setup-form p-8 rounded-3xl shadow-2xl mb-8">
                 <h2 class="text-3xl font-bold text-gray-800 mb-6 text-center">🛠️ Initial Setup</h2>
                 <div class="max-w-md mx-auto">
@@ -366,7 +366,8 @@
                 showFiltersSection();
                 updateFiltersDisplay();
             } else {
-                document.getElementById('setupSection').style.display = 'block';
+                // If no filters are stored, show the setup page by default
+                document.getElementById('setupSection').classList.remove('hidden');
             }
 
             if (storedNotifications) {
@@ -426,7 +427,7 @@
         }
 
         function showFiltersSection() {
-            document.getElementById('setupSection').style.display = 'none';
+            document.getElementById('setupSection').classList.add('hidden');
             document.getElementById('filtersSection').classList.remove('hidden');
             document.getElementById('notificationsSection').classList.remove('hidden');
         }
@@ -684,8 +685,8 @@
                 setTimeout(() => {
                     new Notification('Water Filter Test', {
                         body: `Time to replace: ${filter.name}`,
-                        icon: '💧',
-                        badge: '💧'
+                        icon: 'icons/icon-192x192.png',
+                        badge: 'icons/icon-512x512.png',
                     });
                     addNotification(`Test notification sent for ${filter.name}`);
                 }, delay);
