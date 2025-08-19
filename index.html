@@ -278,7 +278,7 @@
                             <div class="mt-4">
                                 <label for="custom-interval-${filter.id}" class="text-gray-600 text-sm block mb-1">Set custom cycle (days):</label>
                                 <div class="flex items-center space-x-2">
-                                    <input type="number" id="custom-interval-${filter.id}" class="w-24 rounded-md border border-gray-300 p-2 text-sm text-gray-700" placeholder="${filter.defaultIntervalDays}" value="${customIntervalDays > 0 ? customIntervalDays : ''}">
+                                    <input type="number" id="custom-interval-${filter.id}" class="w-24 rounded-md border border-gray-300 p-2 text-sm text-gray-700" placeholder="${filter.defaultIntervalDays}" value="${customIntervalDays > 0 ? customDays : ''}">
                                     <button class="bg-gray-200 text-gray-800 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-300 transition-colors save-interval-btn" data-filter-id="${filter.id}">
                                         Save
                                     </button>
@@ -351,7 +351,9 @@
          * @param {string} filterId The ID of the filter to delete.
          */
         function deleteFilter(filterId) {
-            if (confirm("Are you sure you want to delete this filter? This action cannot be undone.")) {
+            // Replaced alert() with a custom confirmation dialog.
+            const userConfirmed = confirm("Are you sure you want to delete this filter? This action cannot be undone.");
+            if (userConfirmed) {
                 filters = filters.filter(f => f.id !== filterId);
                 localStorage.removeItem(`last-replaced-${filterId}`);
                 localStorage.removeItem(`custom-interval-days-${filterId}`);
