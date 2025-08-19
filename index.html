@@ -755,14 +755,18 @@
             const statusText = document.getElementById('notification-status');
             const requestBtn = document.getElementById('request-permission-btn');
 
-            if (!('Notification' in window)) {
-                statusText.textContent = '🔔 Notifications: Not supported';
-                requestBtn.style.display = 'none';
-            } else {
+            if ('Notification' in window) {
                 updatePermissionStatus(Notification.permission);
                 Notification.onpermissionchange = () => {
                     updatePermissionStatus(Notification.permission);
                 };
+            } else {
+                statusText.textContent = '🔔 Notifications: Not supported';
+                requestBtn.style.display = 'block'; // Make sure the button is visible
+                requestBtn.disabled = false;
+                requestBtn.style.cursor = 'pointer';
+                requestBtn.classList.remove('grayscale', 'cursor-not-allowed');
+                requestBtn.classList.add('hover:scale-105');
             }
         }
 
@@ -800,6 +804,8 @@
                         showToast('Notification permission denied', 'warning');
                     }
                 });
+            } else {
+                showToast('Notifications are not supported in this browser.', 'error');
             }
         }
     </script>
