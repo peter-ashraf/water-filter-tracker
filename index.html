@@ -284,9 +284,14 @@
                                     </button>
                                 </div>
                             </div>
-                            <button class="mt-4 w-full bg-${filter.color}-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-${filter.color}-600 transition-colors replace-btn" data-filter-id="${filter.id}">
-                                Mark as Replaced
-                            </button>
+                            <div class="flex space-x-2 mt-4">
+                                <button class="w-1/2 bg-${filter.color}-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-${filter.color}-600 transition-colors replace-btn" data-filter-id="${filter.id}">
+                                    Mark as Replaced
+                                </button>
+                                <button class="w-1/2 bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-gray-600 transition-colors test-notification-btn" data-filter-id="${filter.id}">
+                                    Test Notification
+                                </button>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -330,6 +335,13 @@
                 button.addEventListener('click', (e) => {
                     const filterId = e.target.closest('button').dataset.filterId;
                     deleteFilter(filterId);
+                });
+            });
+            
+            document.querySelectorAll('.test-notification-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const filterId = e.target.dataset.filterId;
+                    testNotification(filterId);
                 });
             });
         }
@@ -444,6 +456,53 @@
             }
         }
         
+        /**
+         * Sends a test notification for a specific filter.
+         * @param {string} filterId The ID of the filter.
+         */
+        function testNotification(filterId) {
+            if (!('Notification' in window)) {
+                showToast('Notifications are not supported in this browser.', 'error');
+                return;
+            }
+            if (Notification.permission !== 'granted') {
+                showToast('Please enable notifications first.', 'warning');
+                return;
+            }
+
+            const filter = filters.find(f => f.id === filterId);
+            if (!filter) return;
+            
+            const title = `Test: ${filter.name} Filter Alert!`;
+            const options = {
+                body: `This is a test notification for your ${filter.name}.`,
+                icon: 'https://placehold.co/192x192/4F46E5/FFFFFF?text=💧'
+            };
+
+            const newNotification = new Notification(title, options);
+            
+            // Log the test notification to the UI and storage
+            logNotification({
+                title: `Test for ${filter.name}`,
+                timestamp: Date.now()
+            });
+
+            showToast(`Test notification sent for ${filter.name}!`, "success");
+        }
+        
+        /**
+         * Logs a new notification to the UI and local storage.
+         * @param {Object} note The notification object to log.
+         */
+        function logNotification(note) {
+            notifications.unshift(note);
+            if (notifications.length > 10) {
+                notifications.pop(); // Keep list size manageable
+            }
+            saveState();
+            renderNotifications();
+        }
+
         /**
          * Renders the recent notifications from local storage.
          */
