@@ -328,26 +328,72 @@
                 font-size: 0.9rem;
             }
             
-            /* Mobile-specific theme toggle positioning */
+            /* Mobile-specific theme toggle positioning - IMPROVED */
             .absolute.top-0.right-0 {
                 position: fixed !important;
-                top: 1rem !important;
-                right: 1rem !important;
-                z-index: 1000;
+                top: max(1.5rem, env(safe-area-inset-top, 1.5rem)) !important;
+                right: max(1.5rem, env(safe-area-inset-right, 1.5rem)) !important;
+                z-index: 10000; /* Higher z-index to ensure visibility above all content */
+                padding: 0.5rem;
             }
             
             #themeToggleBtn {
-                width: 3rem;
-                height: 3rem;
+                width: 4rem; /* Increased for better touch target */
+                height: 4rem;
                 border-radius: 50%;
-                background: rgba(255, 255, 255, 0.2) !important;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.3);
+                background: rgba(255, 255, 255, 0.3) !important;
+                backdrop-filter: blur(20px);
+                border: 2px solid rgba(255, 255, 255, 0.5);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            #themeToggleBtn:hover {
+                transform: scale(1.05);
+                background: rgba(255, 255, 255, 0.4) !important;
+            }
+            
+            #themeToggleBtn:active {
+                transform: scale(0.95);
+                background: rgba(255, 255, 255, 0.5) !important;
             }
             
             .dark #themeToggleBtn {
-                background: rgba(0, 0, 0, 0.2) !important;
-                border-color: rgba(255, 255, 255, 0.2);
+                background: rgba(0, 0, 0, 0.4) !important;
+                border-color: rgba(255, 255, 255, 0.4);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+            }
+            
+            .dark #themeToggleBtn:hover {
+                background: rgba(0, 0, 0, 0.5) !important;
+            }
+            
+            .dark #themeToggleBtn:active {
+                background: rgba(0, 0, 0, 0.6) !important;
+            }
+            
+            /* Adjust theme toggle icons for better mobile visibility */
+            .theme-toggle-container {
+                width: 2.4rem;
+                height: 2.4rem;
+            }
+            
+            .theme-toggle-icon {
+                font-size: 1.6rem;
+            }
+            
+            /* Ensure header content doesn't overlap with toggle */
+            .text-center.mb-8 {
+                margin-top: 2rem; /* Increased margin to prevent overlap */
+                padding-top: 0.5rem;
+            }
+            
+            /* Additional spacing for notification banner */
+            #notificationBanner {
+                margin-top: 0.5rem;
             }
             
             /* Pull-to-refresh indicator */
@@ -363,7 +409,7 @@
                 background: rgba(255, 255, 255, 0.9);
                 backdrop-filter: blur(10px);
                 transition: transform 0.3s ease;
-                z-index: 1001;
+                z-index: 9999; /* Below theme toggle */
             }
             
             .dark .pull-to-refresh {
@@ -373,28 +419,31 @@
             .refreshing .pull-to-refresh {
                 transform: translateY(50px);
             }
+            
+            /* Improved touch interactions for all buttons */
+            .btn-touch {
+                min-height: 44px;
+                min-width: 44px;
+                padding: 12px 16px;
+                font-size: 16px;
+                border-radius: 12px;
+            }
+            
+            /* Card action buttons grid */
+            .card-actions {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 0.75rem;
+                margin-top: 1.25rem;
+            }
+            
+            .card-actions .btn {
+                font-size: 0.85rem;
+                padding: 0.6rem;
+                min-height: 40px;
+            }
         }
 
-        /* Touch-friendly button enhancements */
-        .btn-touch {
-            padding: 12px 16px;
-            font-size: 16px; /* Prevents zoom on iOS */
-            border-radius: 12px;
-        }
-
-        /* Card action buttons grid */
-        .card-actions {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .card-actions .btn {
-            font-size: 0.8rem;
-            padding: 0.5rem;
-            min-height: 36px;
-        }
     </style>
 </head>
 <body class="min-h-screen p-4">
