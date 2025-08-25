@@ -423,7 +423,30 @@
             transform: translateX(16px);
         }
 
-    </style>
+    
+
+/* PATCH: Header banner styling */
+header.app-header {
+  background: #ffffff;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.dark header.app-header {
+  background: #1f2937;
+  color: #f8fafc;
+}
+
+/* PATCH: Dark mode card text visibility */
+.filter-card { color: #1f2937; }
+.dark .filter-card { color: #f8fafc; }
+
+/* PATCH: Card button alignment */
+.card-actions {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem;
+}
+
+</style>
 </head>
 <body class="min-h-screen p-4">
 
@@ -1234,5 +1257,48 @@
         window.replaceFilter = replaceFilter;
         window.closeModal = closeModal;
     </script>
+<script>
+
+// PATCH: Notification subscription wiring
+const VAPID_KEY = null; // replace with real key if using a push server
+
+async function enableNotifications() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    showToast('Notifications permission denied');
+    return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  try {
+    await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: VAPID_KEY
+    });
+    localStorage.setItem('notificationsEnabled', 'true');
+    showToast('Notifications enabled');
+  } catch (e) {
+    showToast('Failed to subscribe to push notifications');
+  }
+}
+
+async function disableNotifications() {
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) await sub.unsubscribe();
+  localStorage.setItem('notificationsEnabled', 'false');
+  showToast('Notifications disabled');
+}
+
+async function testNotification() {
+  const reg = await navigator.serviceWorker.ready;
+  if (localStorage.getItem('notificationsEnabled') !== 'true') {
+    showToast('Notifications are disabled');
+    return;
+  }
+  reg.showNotification('Test Notification', {
+    body: 'This is a test notification from Filter Tracker'
+  });
+}
+</script>
 </body>
 </html>
